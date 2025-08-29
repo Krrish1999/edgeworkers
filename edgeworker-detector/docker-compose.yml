@@ -1,0 +1,159 @@
+version: '3.8'
+
+services:
+  # MongoDB for storing cold-start metrics
+  mongodb:
+    image: mongo:7.0
+    container_name: edgeworker-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - edgeworker-network
+    # Healthcheck ensures the database is responsive before other services connect.
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongo localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: ["mongod", "--bind_ip_all"]
+
+  # InfluxDB for time-series data
+  influxdb:
+    image: influxdb:2.7
+    container_name: edgeworker-influxdb
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: password123
+      DOCKER_INFLUXDB_INIT_ORG: akamai
+      DOCKER_INFLUXDB_INIT_BUCKET: edgeworker-metrics
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: your-super-secret-admin-token
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    networks:
+      - edgeworker-network
+    # Healthcheck ensures InfluxDB's API is ready.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and real-time data
+  redis:
+    image: redis:7.2-alpine
+    container_name: edgeworker-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - edgeworker-network
+    # Healthcheck ensures Redis server is ready for commands.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: edgeworker-backend
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      MONGODB_URI: mongodb://admin:password123@mongodb:27017/edgeworker?authSource=admin
+      INFLUXDB_URL: http://influxdb:8086
+      INFLUXDB_TOKEN: your-super-secret-admin-token
+      INFLUXDB_ORG: akamai
+      INFLUXDB_BUCKET: edgeworker-metrics
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3001:3001"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - edgeworker-network
+
+  # Frontend Dashboard
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: edgeworker-frontend
+    environment:
+      VITE_API_BASE_URL: http://backend:3001
+      VITE_WS_URL: ws://backend:3001
+    ports:
+      - "3000:3000"
+    command: npm run dev
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - edgeworker-network
+  
+
+  # Data Generator Service (Python)
+  data-generator:
+    build:
+      context: ./data-generator
+      dockerfile: Dockerfile
+    container_name: edgeworker-data-generator
+    environment:
+      INFLUXDB_URL: http://influxdb:8086
+      INFLUXDB_TOKEN: your-super-secret-admin-token
+      INFLUXDB_ORG: akamai
+      INFLUXDB_BUCKET: edgeworker-metrics
+      GENERATION_INTERVAL: 10
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    networks:
+      - edgeworker-network
+
+  # Grafana for Advanced Monitoring (Optional)
+  # grafana:
+  #   image: grafana/grafana:10.2.0
+  #   container_name: edgeworker-grafana
+  #   environment:
+  #     GF_SECURITY_ADMIN_PASSWORD: admin123
+  #   ports:
+  #     - "3002:3000"
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+  #     - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+  #   depends_on:
+  #     - influxdb
+  #   networks:
+  #     - edgeworker-network
+
+volumes:
+  mongodb_data:
+  influxdb_data:
+  redis_data:
+ 
+
+networks:
+  edgeworker-network:
+    driver: bridge

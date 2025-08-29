@@ -1,0 +1,24 @@
+{
+    "akamai_pops": [
+      {
+        "code": "lax1",
+        "city": "Los Angeles",
+        "country": "USA",
+        "region": "North America",
+        "lat": 34.0522,
+        "lon": -118.2437,
+        "tier": "tier1",
+        "capacity": "high"
+      },
+      {
+        "code": "nyc1",
+        "city": "New York",
+        "country": "USA",
+        "region": "North America", 
+        "lat": 40.7128,
+        "lon": -74.0060,
+        "tier": "tier1",
+        "capacity": "high"
+      }
+    ]
+  }

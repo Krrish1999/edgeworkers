@@ -1,0 +1,6 @@
+influxdb-client==1.38.0
+requests==2.31.0
+numpy==1.24.3
+python-dotenv==1.0.0
+schedule==1.2.0
+faker==19.6.2

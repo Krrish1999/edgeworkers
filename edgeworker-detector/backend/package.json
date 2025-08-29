@@ -1,0 +1,23 @@
+{
+  "name": "edgeworker-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js"
+  },
+  "dependencies": {
+    "@influxdata/influxdb-client": "^1.33.0",
+    "@influxdata/influxdb-client-apis": "^1.33.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "mongoose": "^8.0.0",
+    "morgan": "^1.10.0",
+    "node-cron": "^3.0.0",
+    "nodemailer": "^6.9.0",
+    "redis": "^4.6.0",
+    "simple-statistics": "^7.8.0",
+    "ws": "^8.18.3"
+  }
+}
