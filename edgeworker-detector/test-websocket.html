@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .message { background-color: #f8f9fa; padding: 10px; margin: 5px 0; border-left: 3px solid #007bff; }
+    </style>
+</head>
+<body>
+    <h1>EdgeWorker WebSocket Test</h1>
+    <div id="status" class="status disconnected">Disconnected</div>
+    <button onclick="connect()">Connect</button>
+    <button onclick="disconnect()">Disconnect</button>
+    <h3>Messages:</h3>
+    <div id="messages"></div>
+
+    <script>
+        let ws = null;
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+
+        function updateStatus(status, className) {
+            statusDiv.textContent = status;
+            statusDiv.className = `status ${className}`;
+        }
+
+        function addMessage(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            messageDiv.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${JSON.stringify(message, null, 2)}`;
+            messagesDiv.insertBefore(messageDiv, messagesDiv.firstChild);
+        }
+
+        function connect() {
+            if (ws) {
+                ws.close();
+            }
+
+            const wsUrl = 'ws://localhost:3001';
+            console.log('Connecting to:', wsUrl);
+            
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                updateStatus('Connected to ' + wsUrl, 'connected');
+                addMessage({ type: 'connection', status: 'connected' });
+                
+                // Subscribe to updates
+                ws.send(JSON.stringify({
+                    type: 'subscribe',
+                    topics: ['metrics', 'alerts']
+                }));
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    addMessage(data);
+                } catch (error) {
+                    addMessage({ type: 'error', message: 'Failed to parse message', raw: event.data });
+                }
+            };
+
+            ws.onclose = (event) => {
+                updateStatus(`Disconnected (${event.code}: ${event.reason})`, 'disconnected');
+                addMessage({ type: 'connection', status: 'disconnected', code: event.code, reason: event.reason });
+            };
+
+            ws.onerror = (error) => {
+                updateStatus('Error', 'disconnected');
+                addMessage({ type: 'error', message: 'WebSocket error', error: error });
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        // Auto-connect on page load
+        connect();
+    </script>
+</body>
+</html>

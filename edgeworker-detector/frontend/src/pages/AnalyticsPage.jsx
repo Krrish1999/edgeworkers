@@ -34,8 +34,8 @@ const AnalyticsPage = () => {
   const [selectedTab, setSelectedTab] = useState(0);
   const [timeRange, setTimeRange] = useState('24h');
   
-  const { data: timeseriesData } = useApi(`/api/dashboard/timeseries?range=${timeRange}`);
-  const { data: aggregateData } = useApi(`/api/metrics/aggregate?range=${timeRange}&groupBy=country`);
+  const { data: timeseriesData } = useApi(`/dashboard/timeseries?range=${timeRange}`);
+  const { data: aggregateData } = useApi(`/dashboard/metrics/aggregate?range=${timeRange}&groupBy=country`);
 
   // Mock historical data for trends
   const historicalData = [
@@ -208,7 +208,7 @@ const AnalyticsPage = () => {
                 </Typography>
                 <Box sx={{ height: 400 }}>
                   <ResponsiveContainer>
-                    <BarChart data={aggregateData || []}>
+                    <BarChart data={aggregateData?.data || []}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                       <XAxis dataKey="country" stroke="rgba(255,255,255,0.7)" />
                       <YAxis stroke="rgba(255,255,255,0.7)" />

@@ -6,7 +6,10 @@ const router = express.Router();
 // Get all PoPs with their current status
 router.get('/', async (req, res) => {
     try {
-        const { queryApi } = getInfluxClient();
+        const { executeQuery, ensureConnection } = getInfluxClient();
+        
+        // Ensure connection is healthy before executing query
+        await ensureConnection();
         
         // Get recent data for all PoPs
         const query = `
@@ -19,7 +22,7 @@ router.get('/', async (req, res) => {
             |> group()
         `;
         
-        const queryResult = await queryApi.collectRows(query);
+        const queryResult = await executeQuery(query, { timeout: 20000 });
         const pops = queryResult.map(record => {
             let status = 'healthy';
             if (record._value > 15) status = 'critical';
@@ -38,16 +41,22 @@ router.get('/', async (req, res) => {
             };
         });
         
-       
-        
         res.json({
             total: pops.length,
             pops: pops.sort((a, b) => a.city.localeCompare(b.city))
         });
         
     } catch (error) {
-        console.error('❌ Get PoPs error:', error);
-        res.status(500).json({ error: 'Failed to fetch PoPs' });
+        console.error('❌ Get PoPs error:', error.message);
+        
+        // Return appropriate error status based on error type
+        if (error.message.includes('not connected') || error.message.includes('not available')) {
+            res.status(503).json({ error: 'Database temporarily unavailable', details: error.message });
+        } else if (error.message.includes('timeout')) {
+            res.status(504).json({ error: 'Request timeout', details: error.message });
+        } else {
+            res.status(500).json({ error: 'Failed to fetch PoPs', details: error.message });
+        }
     }
 });
 
@@ -55,7 +64,10 @@ router.get('/', async (req, res) => {
 router.get('/:popCode', async (req, res) => {
     try {
         const { popCode } = req.params;
-        const { queryApi } = getInfluxClient();
+        const { executeQuery, ensureConnection } = getInfluxClient();
+        
+        // Ensure connection is healthy before executing query
+        await ensureConnection();
         
         // Get PoP details and recent metrics
         const query = `
@@ -66,7 +78,7 @@ router.get('/:popCode', async (req, res) => {
             |> filter(fn: (r) => r._field == "cold_start_time_ms")
         `;
         
-        const queryResult = await queryApi.collectRows(query);
+        const queryResult = await executeQuery(query, { timeout: 25000 });
 
         if (!queryResult || queryResult.length === 0) {
             return res.status(404).json({ error: 'PoP not found' });
@@ -105,8 +117,16 @@ router.get('/:popCode', async (req, res) => {
         });
         
     } catch (error) {
-        console.error('❌ Get PoP details error:', error);
-        res.status(500).json({ error: 'Failed to fetch PoP details' });
+        console.error('❌ Get PoP details error:', error.message);
+        
+        // Return appropriate error status based on error type
+        if (error.message.includes('not connected') || error.message.includes('not available')) {
+            res.status(503).json({ error: 'Database temporarily unavailable', details: error.message });
+        } else if (error.message.includes('timeout')) {
+            res.status(504).json({ error: 'Request timeout', details: error.message });
+        } else {
+            res.status(500).json({ error: 'Failed to fetch PoP details', details: error.message });
+        }
     }
 });
 

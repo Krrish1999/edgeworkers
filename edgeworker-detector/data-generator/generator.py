@@ -4,11 +4,13 @@ import random
 import json
 import logging
 import numpy as np
+import threading
 from datetime import datetime, timedelta
 from influxdb_client import InfluxDBClient, Point, WritePrecision
 from influxdb_client.client.write_api import SYNCHRONOUS
 from faker import Faker
 import schedule
+from flask import Flask, jsonify
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,10 +38,23 @@ class EdgeWorkerDataGenerator:
         # Track regression state
         self.regression_state = {}
         
+        # Health monitoring
+        self.last_successful_write = None
+        self.total_writes = 0
+        self.failed_writes = 0
+        self.connection_status = "disconnected"
+        self.last_error = None
+        
+        # Flask app for health check
+        self.app = Flask(__name__)
+        self.setup_health_endpoints()
+        
     def connect_to_influxdb(self):
-        """Establish connection to InfluxDB with retry logic"""
+        """Establish connection to InfluxDB with exponential backoff retry logic"""
         max_retries = 10
         retry_count = 0
+        base_delay = 1  # Start with 1 second delay
+        max_delay = 60  # Maximum delay of 60 seconds
         
         while retry_count < max_retries:
             try:
@@ -53,15 +68,25 @@ class EdgeWorkerDataGenerator:
                 # Test connection
                 health = self.client.health()
                 if health.status == "pass":
-                    logger.info("Successfully connected to InfluxDB")
+                    self.connection_status = "connected"
+                    self.last_error = None
+                    logger.info("✅ Successfully connected to InfluxDB")
                     return True
                     
             except Exception as e:
                 retry_count += 1
-                logger.warning(f"Failed to connect to InfluxDB (attempt {retry_count}): {e}")
-                time.sleep(5)
+                self.connection_status = "disconnected"
+                self.last_error = str(e)
                 
-        logger.error("Failed to connect to InfluxDB after maximum retries")
+                # Calculate exponential backoff delay
+                delay = min(base_delay * (2 ** (retry_count - 1)), max_delay)
+                
+                logger.warning(f"❌ Failed to connect to InfluxDB (attempt {retry_count}/{max_retries}): {e}")
+                logger.info(f"⏳ Retrying in {delay} seconds...")
+                time.sleep(delay)
+                
+        logger.error("💥 Failed to connect to InfluxDB after maximum retries")
+        self.connection_status = "failed"
         return False
     
     def generate_akamai_pops(self):
@@ -97,6 +122,119 @@ class EdgeWorkerDataGenerator:
         ]
         
         return pops
+    
+    def setup_health_endpoints(self):
+        """Setup Flask endpoints for health monitoring"""
+        
+        @self.app.route('/health', methods=['GET'])
+        def health_check():
+            """Health check endpoint for monitoring data generator status"""
+            try:
+                # Check InfluxDB connection
+                influx_healthy = False
+                if self.client:
+                    try:
+                        health = self.client.health()
+                        influx_healthy = health.status == "pass"
+                    except:
+                        influx_healthy = False
+                
+                # Calculate uptime and success rate
+                uptime_seconds = 0
+                if hasattr(self, 'start_time'):
+                    uptime_seconds = (datetime.utcnow() - self.start_time).total_seconds()
+                
+                success_rate = 0
+                if self.total_writes > 0:
+                    success_rate = ((self.total_writes - self.failed_writes) / self.total_writes) * 100
+                
+                # Determine overall health status
+                overall_status = "healthy"
+                if not influx_healthy or self.connection_status == "failed":
+                    overall_status = "unhealthy"
+                elif self.connection_status == "error" or (self.total_writes > 0 and success_rate < 90):
+                    overall_status = "degraded"
+                
+                health_data = {
+                    "status": overall_status,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "uptime_seconds": int(uptime_seconds),
+                    "influxdb": {
+                        "connection_status": self.connection_status,
+                        "healthy": influx_healthy,
+                        "last_error": self.last_error
+                    },
+                    "metrics": {
+                        "total_writes": self.total_writes,
+                        "failed_writes": self.failed_writes,
+                        "success_rate_percent": round(success_rate, 2),
+                        "last_successful_write": self.last_successful_write.isoformat() if self.last_successful_write else None
+                    },
+                    "pops": {
+                        "total_monitored": len(self.pops),
+                        "currently_regressed": sum(1 for state in self.regression_state.values() if state.get('is_regressed', False))
+                    }
+                }
+                
+                status_code = 200 if overall_status == "healthy" else 503
+                return jsonify(health_data), status_code
+                
+            except Exception as e:
+                logger.error(f"❌ Health check failed: {e}")
+                return jsonify({
+                    "status": "error",
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "error": str(e)
+                }), 500
+        
+        @self.app.route('/metrics', methods=['GET'])
+        def metrics_endpoint():
+            """Detailed metrics endpoint for monitoring"""
+            try:
+                # Get regression details
+                regressed_pops = []
+                for pop_code, state in self.regression_state.items():
+                    if state.get('is_regressed', False):
+                        pop_info = next((p for p in self.pops if p['code'] == pop_code), None)
+                        if pop_info:
+                            regressed_pops.append({
+                                "pop_code": pop_code,
+                                "city": pop_info['city'],
+                                "country": pop_info['country'],
+                                "regression_start": state['regression_start'].isoformat() if state['regression_start'] else None,
+                                "duration_seconds": state.get('regression_duration', 0)
+                            })
+                
+                metrics_data = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "generator": {
+                        "total_writes": self.total_writes,
+                        "failed_writes": self.failed_writes,
+                        "success_rate_percent": round(((self.total_writes - self.failed_writes) / max(self.total_writes, 1)) * 100, 2),
+                        "last_successful_write": self.last_successful_write.isoformat() if self.last_successful_write else None
+                    },
+                    "pops": {
+                        "total": len(self.pops),
+                        "healthy": len(self.pops) - len(regressed_pops),
+                        "regressed": len(regressed_pops),
+                        "regressed_details": regressed_pops
+                    },
+                    "influxdb": {
+                        "connection_status": self.connection_status,
+                        "url": self.influx_url,
+                        "bucket": self.influx_bucket,
+                        "last_error": self.last_error
+                    }
+                }
+                
+                return jsonify(metrics_data), 200
+                
+            except Exception as e:
+                logger.error(f"❌ Metrics endpoint failed: {e}")
+                return jsonify({
+                    "error": str(e),
+                    "timestamp": datetime.utcnow().isoformat()
+                }), 500
     
     def simulate_cold_start_time(self, pop):
         """Generate realistic cold start times with potential regressions"""
@@ -179,20 +317,94 @@ class EdgeWorkerDataGenerator:
         return points
     
     def write_metrics(self, points):
-        """Write metrics to InfluxDB"""
-        try:
-            self.write_api.write(bucket=self.influx_bucket, record=points)
-            logger.info(f"✅ Written {len(points)} metrics to InfluxDB")
-        except Exception as e:
-            logger.error(f"❌ Failed to write metrics: {e}")
+        """Write metrics to InfluxDB with retry logic and confirmation logging"""
+        max_retries = 3
+        retry_count = 0
+        base_delay = 1
+        
+        while retry_count < max_retries:
+            try:
+                # Attempt to write metrics
+                start_time = time.time()
+                self.write_api.write(bucket=self.influx_bucket, record=points)
+                write_duration = time.time() - start_time
+                
+                # Write confirmation logging
+                self.total_writes += 1
+                self.last_successful_write = datetime.utcnow()
+                self.connection_status = "connected"
+                self.last_error = None
+                
+                logger.info(f"✅ Successfully written {len(points)} metrics to InfluxDB in {write_duration:.3f}s")
+                logger.debug(f"📊 Total successful writes: {self.total_writes}, Failed writes: {self.failed_writes}")
+                return True
+                
+            except Exception as e:
+                retry_count += 1
+                self.failed_writes += 1
+                self.last_error = str(e)
+                
+                if retry_count < max_retries:
+                    # Calculate exponential backoff delay
+                    delay = base_delay * (2 ** (retry_count - 1))
+                    logger.warning(f"⚠️  Failed to write metrics (attempt {retry_count}/{max_retries}): {e}")
+                    logger.info(f"⏳ Retrying write in {delay} seconds...")
+                    time.sleep(delay)
+                    
+                    # Try to reconnect if connection seems lost
+                    try:
+                        health = self.client.health()
+                        if health.status != "pass":
+                            logger.warning("🔄 Connection health check failed, attempting reconnect...")
+                            self.connect_to_influxdb()
+                    except:
+                        logger.warning("🔄 Connection lost, attempting reconnect...")
+                        self.connect_to_influxdb()
+                else:
+                    # Final failure
+                    self.connection_status = "error"
+                    logger.error(f"💥 Failed to write metrics after {max_retries} attempts: {e}")
+                    logger.error(f"📊 Total failed writes: {self.failed_writes}")
+                    
+        return False
+    
+    def start_health_server(self):
+        """Start the Flask health check server in a separate thread"""
+        def run_server():
+            # Disable Flask's default logging to avoid conflicts
+            import logging as flask_logging
+            flask_log = flask_logging.getLogger('werkzeug')
+            flask_log.setLevel(flask_logging.ERROR)
+            
+            port = int(os.getenv('HEALTH_CHECK_PORT', 8080))
+            logger.info(f"🏥 Starting health check server on port {port}")
+            self.app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+        
+        health_thread = threading.Thread(target=run_server, daemon=True)
+        health_thread.start()
+        return health_thread
     
     def run_generator(self):
         """Main generator loop"""
+        # Track start time for uptime calculation
+        self.start_time = datetime.utcnow()
+        
+        # Start health check server
+        self.start_health_server()
+        
         if not self.connect_to_influxdb():
-            return
+            logger.error("💥 Failed to connect to InfluxDB, but continuing to run health server...")
+            # Keep running for health checks even if InfluxDB is down
+            while True:
+                time.sleep(10)
+                # Periodically try to reconnect
+                logger.info("🔄 Attempting to reconnect to InfluxDB...")
+                if self.connect_to_influxdb():
+                    break
             
         logger.info("🚀 Starting EdgeWorker Cold-Start Data Generator")
         logger.info(f"📊 Monitoring {len(self.pops)} PoPs across {len(set(p['country'] for p in self.pops))} countries")
+        logger.info(f"🏥 Health check available at http://localhost:{os.getenv('HEALTH_CHECK_PORT', 8080)}/health")
         
         # Generate initial batch
         self.generate_and_write_metrics()
@@ -205,18 +417,37 @@ class EdgeWorkerDataGenerator:
             time.sleep(1)
     
     def generate_and_write_metrics(self):
-        """Generate and write metrics"""
+        """Generate and write metrics with enhanced error handling"""
         try:
             points = self.generate_metrics_batch()
-            self.write_metrics(points)
+            write_success = self.write_metrics(points)
             
             # Print some stats
-            regression_count = sum(1 for state in self.regression_state.values() if state['is_regressed'])
+            regression_count = sum(1 for state in self.regression_state.values() if state.get('is_regressed', False))
             if regression_count > 0:
                 logger.warning(f"🔥 {regression_count} PoPs currently experiencing regressions")
+            
+            # Log periodic status updates
+            if self.total_writes > 0 and self.total_writes % 10 == 0:
+                success_rate = ((self.total_writes - self.failed_writes) / self.total_writes) * 100
+                logger.info(f"📈 Status: {self.total_writes} total writes, {success_rate:.1f}% success rate")
+            
+            # If write failed, try to reconnect for next attempt
+            if not write_success and self.connection_status != "connected":
+                logger.info("🔄 Attempting to reconnect for next write cycle...")
+                self.connect_to_influxdb()
                 
         except Exception as e:
+            self.failed_writes += 1
+            self.last_error = str(e)
             logger.error(f"❌ Error in generation cycle: {e}")
+            
+            # Try to reconnect on unexpected errors
+            try:
+                logger.info("🔄 Attempting to reconnect after generation error...")
+                self.connect_to_influxdb()
+            except Exception as reconnect_error:
+                logger.error(f"❌ Reconnection failed: {reconnect_error}")
 
 if __name__ == "__main__":
     generator = EdgeWorkerDataGenerator()

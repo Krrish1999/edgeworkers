@@ -35,8 +35,8 @@ const Dashboard = () => {
 
   const [overview, setOverview] = useState(null);
 
-  const { data: overviewData, loading: overviewLoading, error: overviewError } = useApi('/api/dashboard/overview',{refetchInterval: 5000});
-  const { data: heatmapData, loading: heatmapLoading } = useApi('/api/dashboard/heatmap', {refershInterval : 5000});
+  const { data: overviewData, loading: overviewLoading, error: overviewError } = useApi('/dashboard/overview', { refreshInterval: 10000 });
+  const { data: heatmapData, loading: heatmapLoading } = useApi('/dashboard/heatmap', { refreshInterval: 10000 });
   
   const [selectedTimeRange, setSelectedTimeRange] = useState('1h');
 
@@ -156,7 +156,7 @@ const Dashboard = () => {
                   <CircularProgress />
                 </Box>
               ) : (
-                <GlobalHeatMap data={heatmapData} />
+                <GlobalHeatMap data={heatmapData?.data || []} />
               )}
             </CardContent>
           </Card>

@@ -22,9 +22,16 @@ export const WebSocketProvider = ({ children }) => {
 
   const connect = () => {
     try {
-      // FIX: Use a relative URL that can be proxied by Vite
+      // Use the correct WebSocket URL - in development, connect directly to backend port
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const wsUrl = `${protocol}://${window.location.host}`;
+      const host = window.location.hostname;
+      
+      // In Docker environment, connect to backend service directly
+      const wsUrl = import.meta.env.DEV 
+        ? `${protocol}://${host}:3001`  // Development: direct connection
+        : `${protocol}://${window.location.host}`; // Production: same host
+        
+      console.log('🔌 Connecting to WebSocket:', wsUrl);
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {

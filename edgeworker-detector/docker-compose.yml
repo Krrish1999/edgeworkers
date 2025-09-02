@@ -16,7 +16,7 @@ services:
       - edgeworker-network
     # Healthcheck ensures the database is responsive before other services connect.
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongo localhost:27017/test --quiet
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
       interval: 10s
       timeout: 5s
       retries: 5
@@ -100,8 +100,8 @@ services:
       dockerfile: Dockerfile
     container_name: edgeworker-frontend
     environment:
-      VITE_API_BASE_URL: http://backend:3001
-      VITE_WS_URL: ws://backend:3001
+      VITE_API_BASE_URL: /api
+      VITE_WS_URL: ws://localhost:3001
     ports:
       - "3000:3000"
     command: npm run dev
@@ -126,11 +126,20 @@ services:
       INFLUXDB_ORG: akamai
       INFLUXDB_BUCKET: edgeworker-metrics
       GENERATION_INTERVAL: 10
+      HEALTH_CHECK_PORT: 8080
+    ports:
+      - "8080:8080"
     depends_on:
       influxdb:
         condition: service_healthy
     networks:
       - edgeworker-network
+    # Health check for the data generator
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Grafana for Advanced Monitoring (Optional)
   # grafana:

@@ -14,5 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Expose health check port
+EXPOSE 8080
+
 # Run the generator
 CMD ["python", "generator.py"]

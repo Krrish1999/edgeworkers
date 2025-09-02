@@ -11,11 +11,7 @@ export default defineConfig({
         target: 'http://backend:3001',
         changeOrigin: true,
         rewrite: path => path
-      },
-      '/ws': {
-        target: 'ws://backend:3001',
-        ws: true,
-      },
+      }
     }
   },
   define: {

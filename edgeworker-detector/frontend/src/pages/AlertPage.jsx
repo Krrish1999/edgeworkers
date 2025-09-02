@@ -39,7 +39,7 @@ import toast from 'react-hot-toast';
 
 const AlertsPage = () => {
   const { alerts } = useWebSocket();
-  const { data: alertsData, refetch } = useApi('/api/alerts?limit=100');
+  const { data: alertsData, refetch } = useApi('/alerts?limit=100');
   const { patch, loading: actionLoading } = useApiPost();
   
   const [selectedAlert, setSelectedAlert] = useState(null);

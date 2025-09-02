@@ -16,14 +16,14 @@ import { format } from 'date-fns';
 import { useApi } from '../hooks/useApi';
 
 const RealtimeChart = ({ timeRange = '1h' }) => {
-  const { data, loading, error } = useApi(`/api/dashboard/timeseries?range=${timeRange}`);
+  const { data, loading, error } = useApi(`/dashboard/timeseries?range=${timeRange}`);
   const [chartData, setChartData] = useState([]);
 
   useEffect(() => {
-    if (!data) return;
+    if (!data || !data.data) return;
 
-    // Process data for chart
-    const processed = data.reduce((acc, item) => {
+    // Process data for chart - use data.data since API returns {data: [...]}
+    const processed = data.data.reduce((acc, item) => {
       const timeKey = format(new Date(item.timestamp), 'HH:mm');
       
       if (!acc[timeKey]) {

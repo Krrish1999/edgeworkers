@@ -25,7 +25,7 @@ import { Search, Language, Speed, TrendingUp } from '@mui/icons-material';
 import { useApi } from '../hooks/useApi';
 
 const PopsPage = () => {
-  const { data: popsData, loading } = useApi('/api/pops');
+  const { data: popsData, loading } = useApi('/pops');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [tierFilter, setTierFilter] = useState('all');

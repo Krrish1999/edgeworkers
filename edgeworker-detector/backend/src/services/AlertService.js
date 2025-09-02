@@ -2,8 +2,9 @@ import Alert from '../models/Alert.js';
 import nodemailer from 'nodemailer';
 
 class AlertService {
-    constructor() {
+    constructor(webSocketServer = null) {
         this.emailTransporter = null;
+        this.webSocketServer = webSocketServer;
         this.initializeEmailService();
     }
     
@@ -50,6 +51,9 @@ class AlertService {
             
             // Send notifications
             await this.sendNotifications(savedAlert);
+            
+            // Send WebSocket notification for real-time alerts
+            await this.sendWebSocketNotification(savedAlert);
             
             return savedAlert;
             
@@ -228,6 +232,104 @@ class AlertService {
         `;
     }
     
+    async sendWebSocketNotification(alert) {
+        try {
+            if (!this.webSocketServer || !this.webSocketServer.clients || this.webSocketServer.clients.size === 0) {
+                console.log('📡 No WebSocket clients connected, skipping alert broadcast');
+                return;
+            }
+
+            const alertNotification = {
+                type: 'alert_created',
+                data: {
+                    id: alert._id,
+                    type: alert.type,
+                    severity: alert.severity,
+                    status: alert.status,
+                    pop_code: alert.pop_code,
+                    city: alert.city,
+                    country: alert.country,
+                    message: alert.message,
+                    created_at: alert.created_at,
+                    details: alert.details
+                },
+                timestamp: new Date().toISOString()
+            };
+
+            const broadcastResult = this.webSocketServer.broadcast(alertNotification);
+            console.log(`🚨 Alert notification broadcast: ${broadcastResult.successfulBroadcasts}/${broadcastResult.totalClients} clients notified`);
+
+        } catch (error) {
+            console.error('❌ Failed to send WebSocket alert notification:', error.message);
+        }
+    }
+
+    async resolveAlert(alertId, resolvedBy = 'system', resolutionNotes = '') {
+        try {
+            const alert = await Alert.findById(alertId);
+            if (!alert) {
+                throw new Error(`Alert ${alertId} not found`);
+            }
+
+            if (alert.status === 'resolved') {
+                console.log(`ℹ️  Alert ${alertId} already resolved`);
+                return alert;
+            }
+
+            alert.status = 'resolved';
+            alert.resolved_at = new Date();
+            alert.resolved_by = resolvedBy;
+            alert.resolution_notes = resolutionNotes;
+
+            const resolvedAlert = await alert.save();
+            console.log(`✅ Alert resolved: ${alert.message} (ID: ${alertId})`);
+
+            // Send WebSocket notification for alert resolution
+            await this.sendWebSocketResolutionNotification(resolvedAlert);
+
+            return resolvedAlert;
+
+        } catch (error) {
+            console.error('❌ Failed to resolve alert:', error);
+            throw error;
+        }
+    }
+
+    async sendWebSocketResolutionNotification(alert) {
+        try {
+            if (!this.webSocketServer || !this.webSocketServer.clients || this.webSocketServer.clients.size === 0) {
+                console.log('📡 No WebSocket clients connected, skipping alert resolution broadcast');
+                return;
+            }
+
+            const resolutionNotification = {
+                type: 'alert_resolved',
+                data: {
+                    id: alert._id,
+                    type: alert.type,
+                    severity: alert.severity,
+                    status: alert.status,
+                    pop_code: alert.pop_code,
+                    city: alert.city,
+                    country: alert.country,
+                    message: alert.message,
+                    created_at: alert.created_at,
+                    resolved_at: alert.resolved_at,
+                    resolved_by: alert.resolved_by,
+                    resolution_notes: alert.resolution_notes,
+                    duration_ms: alert.duration_ms
+                },
+                timestamp: new Date().toISOString()
+            };
+
+            const broadcastResult = this.webSocketServer.broadcast(resolutionNotification);
+            console.log(`✅ Alert resolution notification broadcast: ${broadcastResult.successfulBroadcasts}/${broadcastResult.totalClients} clients notified`);
+
+        } catch (error) {
+            console.error('❌ Failed to send WebSocket alert resolution notification:', error.message);
+        }
+    }
+
     getSeverityColor(severity) {
         const colors = {
             low: '#ffc107',

@@ -5,7 +5,11 @@
   "type": "module",
   "main": "src/app.js",
   "scripts": {
-    "start": "node src/app.js"
+    "start": "node src/app.js",
+    "test": "node run-integration-tests.js",
+    "test:e2e": "node test-end-to-end-integration.js",
+    "test:websocket": "node test-websocket-multiclient.js",
+    "test:errors": "node test-error-scenarios.js"
   },
   "dependencies": {
     "@influxdata/influxdb-client": "^1.33.0",
@@ -19,5 +23,8 @@
     "redis": "^4.6.0",
     "simple-statistics": "^7.8.0",
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node-cron": "^3.0.11"
   }
 }
