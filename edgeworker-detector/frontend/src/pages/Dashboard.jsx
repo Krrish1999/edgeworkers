@@ -32,14 +32,30 @@ import { useApi } from '../hooks/useApi';
 
 const Dashboard = () => {
   const { alerts, realtimeMetrics, connectionStatus } = useWebSocket();
-  const { data: overview, loading: overviewLoading, error: overviewError } = useApi('/api/dashboard/overview');
-  const { data: heatmapData, loading: heatmapLoading } = useApi('/api/dashboard/heatmap');
+
+  const [overview, setOverview] = useState(null);
+
+  const { data: overviewData, loading: overviewLoading, error: overviewError } = useApi('/api/dashboard/overview',{refetchInterval: 5000});
+  const { data: heatmapData, loading: heatmapLoading } = useApi('/api/dashboard/heatmap', {refershInterval : 5000});
   
   const [selectedTimeRange, setSelectedTimeRange] = useState('1h');
 
   // Calculate metrics for display
   const activeAlerts = alerts.filter(alert => alert.status === 'active').length;
   const criticalAlerts = alerts.filter(alert => alert.severity === 'critical').length;
+
+  useEffect(() => {
+    if (overviewData) {
+      setOverview(overviewData);
+    }
+  }, [overviewData]);
+
+  useEffect(() => {
+    // Update overview data whenever a new WebSocket message arrives
+    if (realtimeMetrics && Object.keys(realtimeMetrics).length > 0) {
+      setOverview(realtimeMetrics);
+    }
+  }, [realtimeMetrics]);
 
   if (overviewLoading) {
     return (

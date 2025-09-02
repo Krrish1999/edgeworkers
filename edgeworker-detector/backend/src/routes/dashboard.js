@@ -1,6 +1,7 @@
 import express from 'express';
 import { getInfluxClient } from '../utils/influxdb.js';
 import { getRedisClient } from '../utils/redis.js';
+import Alert from '../models/Alert.js';
 
 const router = express.Router();
 
@@ -8,45 +9,51 @@ const router = express.Router();
 router.get('/overview', async (req, res) => {
   try {
     const { queryApi } = getInfluxClient();
-    const redisClient = getRedisClient();
 
-    // Query for total PoPs
-    const popQuery = `
+    // FIX: Corrected the Flux query syntax for yielding multiple results.
+    const fluxQuery = `
+      // Base query for the last known state of each PoP
+      lastStates = from(bucket: "${process.env.INFLUXDB_BUCKET}")
+        |> range(start: -10m)
+        |> filter(fn: (r) => r._measurement == "cold_start_metrics" and r._field == "cold_start_time_ms")
+        |> last()
+
+      // Calculate total PoPs that have reported in the last 10m
+      lastStates
+        |> group()
+        |> count(column: "_value")
+        |> yield(name: "total")
+      
+      // Calculate healthy PoPs from the last known states
+      lastStates
+        |> filter(fn: (r) => r._value < 10.0) // Define "healthy" as < 10ms
+        |> group()
+        |> count(column: "_value")
+        |> yield(name: "healthy")
+
+      // Calculate the overall average cold start time in the last minute
       from(bucket: "${process.env.INFLUXDB_BUCKET}")
-      |> range(start: -24h)
-      |> filter(fn: (r) => r._measurement == "cold_start_metrics")
-      |> keep(columns: ["pop_code"])
-      |> group()
-      |> distinct(column: "pop_code")
-      |> count()
+        |> range(start: -1m)
+        |> filter(fn: (r) => r._measurement == "cold_start_metrics" and r._field == "cold_start_time_ms")
+        |> mean()
+        |> yield(name: "avgColdStart")
     `;
-    const totalPopsResult = await queryApi.collectRows(popQuery);
-    const totalPops = totalPopsResult.length > 0 ? totalPopsResult[0]._value : 0;
 
-    // Query for average cold start
-    const avgColdStartQuery = `
-      from(bucket: "${process.env.INFLUXDB_BUCKET}")
-      |> range(start: -1h)
-      |> filter(fn: (r) => r._measurement == "cold_start_metrics" and r._field == "cold_start_time_ms")
-      |> mean()
-    `;
-    const avgColdStartResult = await queryApi.collectRows(avgColdStartQuery);
-    const averageColdStart = avgColdStartResult.length > 0 ? parseFloat(avgColdStartResult[0]._value.toFixed(2)) : 0;
-
-    // Get active regressions from Redis
-    const regressions = parseInt(await redisClient.get('metrics:regressions:last_count') || '0', 10);
-    const healthyPops = totalPops - regressions;
+    const queryResult = await queryApi.collectRows(fluxQuery);
     
-    const overview = {
+    const totalPops = queryResult.find(r => r.result === 'total')?._value || 0;
+    const healthyPops = queryResult.find(r => r.result === 'healthy')?._value || 0;
+    const averageColdStart = queryResult.find(r => r.result === 'avgColdStart')?._value?.toFixed(2) || 0;
+
+    const regressions = await Alert.countDocuments({ status: 'active' });
+    
+    res.json({
       totalPops,
-      totalFunctions: 150, // This metric is not tracked, using a static value
-      averageColdStart,
       healthyPops,
+      averageColdStart: parseFloat(averageColdStart),
       regressions,
-      uptime: 99.9 // This metric is not tracked, using a static value
-    };
+    });
     
-    res.json(overview);
   } catch (error) {
     console.error('Error fetching dashboard overview:', error);
     res.status(500).json({ error: 'Failed to fetch dashboard overview' });
@@ -59,7 +66,7 @@ router.get('/heatmap', async (req, res) => {
     const { queryApi } = getInfluxClient();
     const query = `
         from(bucket: "${process.env.INFLUXDB_BUCKET}")
-        |> range(start: -1h)
+        |> range(start: -5m)
         |> filter(fn: (r) => r._measurement == "cold_start_metrics" and r._field == "cold_start_time_ms")
         |> group(columns: ["pop_code", "city", "country", "latitude", "longitude"])
         |> mean()
