@@ -12,8 +12,9 @@ import {
   TrendingFlat
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
+import InfoTooltip from './InfoTooltip';
 
-const MetricsCard = ({ title, value, icon, color, change, trend }) => {
+const MetricsCard = ({ title, value, icon, color, change, trend, tooltip }) => {
   const getTrendIcon = () => {
     switch (trend) {
       case 'up': return <TrendingUp sx={{ fontSize: 16 }} />;
@@ -56,9 +57,18 @@ const MetricsCard = ({ title, value, icon, color, change, trend }) => {
         <CardContent>
           <Box display="flex" alignItems="center" justifyContent="space-between">
             <Box flex={1}>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                {title}
-              </Typography>
+              <Box display="flex" alignItems="center" gap={0.5} mb={1}>
+                <Typography variant="body2" color="text.secondary">
+                  {title}
+                </Typography>
+                {tooltip && (
+                  <InfoTooltip 
+                    content={tooltip}
+                    placement="top"
+                    size="small"
+                  />
+                )}
+              </Box>
               <Typography variant="h4" component="div" fontWeight="bold">
                 {value}
               </Typography>

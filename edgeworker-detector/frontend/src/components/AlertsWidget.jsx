@@ -23,6 +23,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { motion } from 'framer-motion';
+import InfoTooltip from './InfoTooltip';
 
 const AlertsWidget = ({ alerts = [] }) => {
   const navigate = useNavigate();
@@ -45,26 +46,43 @@ const AlertsWidget = ({ alerts = [] }) => {
     }
   };
 
+  const getSeverityDescription = (severity) => {
+    switch (severity) {
+      case 'critical': return 'Immediate action required - service impact likely';
+      case 'high': return 'Performance degradation detected - monitor closely';
+      case 'medium': return 'Minor performance issue - review when convenient';
+      case 'low': return 'Informational - no immediate action needed';
+      default: return 'Performance degradation detected - monitor closely';
+    }
+  };
+
   return (
     <Card sx={{ height: 500, display: 'flex', flexDirection: 'column' }}>
       <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-          <Typography variant="h6">
-            Recent Alerts
-          </Typography>
-          <Chip 
-            label={alerts.length} 
-            color={alerts.length > 0 ? 'error' : 'success'} 
-            size="small" 
+          <Box display="flex" alignItems="center" gap={1}>
+            <Typography variant="h6">
+              Recent Alerts
+            </Typography>
+            <InfoTooltip
+              content="components.alertsWidget"
+              placement="right"
+              size="small"
+            />
+          </Box>
+          <Chip
+            label={alerts.length}
+            color={alerts.length > 0 ? 'error' : 'success'}
+            size="small"
           />
         </Box>
 
         {alerts.length === 0 ? (
-          <Box 
-            display="flex" 
-            flexDirection="column" 
-            alignItems="center" 
-            justifyContent="center" 
+          <Box
+            display="flex"
+            flexDirection="column"
+            alignItems="center"
+            justifyContent="center"
             flex={1}
             color="text.secondary"
           >
@@ -75,7 +93,25 @@ const AlertsWidget = ({ alerts = [] }) => {
           </Box>
         ) : (
           <>
-            <List sx={{ flex: 1, overflow: 'auto' }}>
+            <List sx={{
+              flex: 1,
+              overflow: 'auto',
+              maxHeight: '350px',
+              '&::-webkit-scrollbar': {
+                width: '6px',
+              },
+              '&::-webkit-scrollbar-track': {
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                borderRadius: '3px',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                borderRadius: '3px',
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.4)',
+                },
+              },
+            }}>
               {alerts.map((alert, index) => (
                 <motion.div
                   key={index}
@@ -83,9 +119,9 @@ const AlertsWidget = ({ alerts = [] }) => {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.1 }}
                 >
-                  <ListItem 
+                  <ListItem
                     alignItems="flex-start"
-                    sx={{ 
+                    sx={{
                       px: 0,
                       '&:hover': {
                         bgcolor: 'rgba(255, 255, 255, 0.02)',
@@ -94,8 +130,8 @@ const AlertsWidget = ({ alerts = [] }) => {
                     }}
                   >
                     <ListItemAvatar>
-                      <Avatar 
-                        sx={{ 
+                      <Avatar
+                        sx={{
                           bgcolor: `${getSeverityColor(alert.severity)}.main`,
                           width: 32,
                           height: 32
@@ -104,30 +140,54 @@ const AlertsWidget = ({ alerts = [] }) => {
                         {getSeverityIcon(alert.severity)}
                       </Avatar>
                     </ListItemAvatar>
-                    
+
                     <ListItemText
                       primary={
-                        <Box>
-                          <Typography variant="body2" component="span">
-                            {alert.message || `Regression at ${alert.pop?.city}`}
-                          </Typography>
-                          <Chip 
-                            label={alert.severity?.toUpperCase() || 'HIGH'} 
-                            size="small" 
-                            color={getSeverityColor(alert.severity)}
-                            sx={{ ml: 1, fontSize: '0.7rem', height: 20 }}
+                        <Box display="flex" alignItems="center" justifyContent="space-between">
+                          <Box>
+                            <Typography variant="body2" component="span">
+                              {alert.message || `Regression at ${alert.city || alert.pop?.city}`}
+                            </Typography>
+                            <Chip
+                              label={alert.severity?.toUpperCase() || 'HIGH'}
+                              size="small"
+                              color={getSeverityColor(alert.severity)}
+                              sx={{ ml: 1, fontSize: '0.7rem', height: 20 }}
+                            />
+                          </Box>
+                          <InfoTooltip
+                            content={{
+                              title: `${alert.severity?.toUpperCase() || 'HIGH'} Alert Details`,
+                              content: `Alert for ${alert.pop_code || alert.pop?.code || 'unknown location'}. ${alert.analysis?.summary || alert.details?.degradationPercent ? `Performance degraded by ${alert.details.degradationPercent}%` : 'Performance issue detected'}.`,
+                              calculation: alert.details?.degradationPercent ? `Degradation: ${alert.details.degradationPercent}%` : 'Performance monitoring detected anomaly',
+                              threshold: `Severity: ${alert.severity || 'high'} - ${getSeverityDescription(alert.severity)}`,
+                              actions: [
+                                {
+                                  label: "View Alert Details",
+                                  url: "/alerts",
+                                  type: "internal"
+                                },
+                                {
+                                  label: "View PoP Details",
+                                  url: "/pops",
+                                  type: "internal"
+                                }
+                              ]
+                            }}
+                            placement="left"
+                            size="small"
                           />
                         </Box>
                       }
                       secondary={
                         <Box mt={0.5}>
                           <Typography variant="caption" color="text.secondary">
-                            {alert.pop?.code} • {alert.analysis?.summary || 'Performance degradation detected'}
+                            {alert.pop_code || alert.pop?.code} • {alert.analysis?.summary || alert.details?.degradationPercent ? `${alert.details.degradationPercent}% degradation` : 'Performance issue detected'}
                           </Typography>
                           <br />
                           <Typography variant="caption" color="text.secondary">
-                            {alert.timestamp ? 
-                              formatDistanceToNow(new Date(alert.timestamp), { addSuffix: true }) :
+                            {alert.created_at || alert.timestamp ?
+                              formatDistanceToNow(new Date(alert.created_at || alert.timestamp), { addSuffix: true }) :
                               'Just now'
                             }
                           </Typography>
@@ -135,7 +195,7 @@ const AlertsWidget = ({ alerts = [] }) => {
                       }
                     />
                   </ListItem>
-                  
+
                   {index < alerts.length - 1 && <Divider variant="inset" component="li" />}
                 </motion.div>
               ))}

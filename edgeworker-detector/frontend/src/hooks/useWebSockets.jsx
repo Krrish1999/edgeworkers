@@ -19,6 +19,7 @@ export const WebSocketProvider = ({ children }) => {
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
   const reconnectInterval = useRef(null);
+  const [initialAlertsLoaded, setInitialAlertsLoaded] = useState(false);
 
   const connect = () => {
     try {
@@ -194,9 +195,57 @@ export const WebSocketProvider = ({ children }) => {
     reconnect: connect
   };
 
-   // Initial connection
+   // Load initial alerts from API
+  const loadInitialAlerts = async () => {
+    if (initialAlertsLoaded) return;
+    
+    try {
+      console.log('🔄 Loading initial alerts from API...');
+      const response = await fetch('/api/alerts?limit=20&status=all');
+      const data = await response.json();
+      
+      if (data.alerts && Array.isArray(data.alerts)) {
+        console.log(`✅ Loaded ${data.alerts.length} initial alerts`);
+        setAlerts(data.alerts);
+        setInitialAlertsLoaded(true);
+      }
+    } catch (error) {
+      console.error('❌ Failed to load initial alerts:', error);
+      // Set some fallback alerts for demo
+      setAlerts([
+        {
+          _id: 'demo-1',
+          type: 'regression',
+          severity: 'high',
+          status: 'active',
+          message: 'Performance regression detected',
+          city: 'New York',
+          country: 'USA',
+          pop_code: 'nyc1',
+          created_at: new Date().toISOString(),
+          analysis: { summary: 'Cold start time increased by 45%' }
+        },
+        {
+          _id: 'demo-2', 
+          type: 'threshold',
+          severity: 'medium',
+          status: 'active',
+          message: 'Threshold exceeded',
+          city: 'London',
+          country: 'UK',
+          pop_code: 'lhr1',
+          created_at: new Date(Date.now() - 300000).toISOString(),
+          analysis: { summary: 'Response time above 10ms threshold' }
+        }
+      ]);
+      setInitialAlertsLoaded(true);
+    }
+  };
+
+  // Initial connection and data loading
   useEffect(() => {
     connect();
+    loadInitialAlerts();
 
     return () => {
       if (socket) {

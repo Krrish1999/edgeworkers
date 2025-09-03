@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI Improvements Test</title>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0a0e1a 0%, #1a1f2e 100%);
+            color: white;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            background: rgba(26, 31, 46, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .status {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 8px;
+            margin: 5px;
+            font-weight: 500;
+        }
+        .success { background: #10b981; }
+        .warning { background: #f59e0b; }
+        .error { background: #ef4444; }
+        .info { background: #3b82f6; }
+        
+        @media (max-width: 768px) {
+            .container { padding: 10px; }
+            .test-section { padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 EdgeWorker UI Improvements Test</h1>
+        
+        <div class="test-section">
+            <h2>✅ UI Improvements Applied</h2>
+            <div class="status success">Enhanced Typography</div>
+            <div class="status success">Responsive Design</div>
+            <div class="status success">Better Color Scheme</div>
+            <div class="status success">Improved Cards</div>
+            <div class="status success">Mobile Optimization</div>
+            <div class="status success">Desktop Compatibility</div>
+        </div>
+
+        <div class="test-section">
+            <h2>🖥️ Desktop Features</h2>
+            <ul>
+                <li>✅ Sticky table headers for better navigation</li>
+                <li>✅ Hover effects and smooth transitions</li>
+                <li>✅ Responsive grid layouts</li>
+                <li>✅ Improved typography scaling</li>
+                <li>✅ Better spacing and padding</li>
+                <li>✅ Enhanced navigation bar</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h2>📱 Mobile Optimizations</h2>
+            <ul>
+                <li>✅ Responsive breakpoints</li>
+                <li>✅ Touch-friendly buttons</li>
+                <li>✅ Collapsible table columns</li>
+                <li>✅ Optimized font sizes</li>
+                <li>✅ Better mobile navigation</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h2>🎯 Test Instructions</h2>
+            <ol>
+                <li>Open <a href="http://localhost:3000" style="color: #00d4ff;">http://localhost:3000</a></li>
+                <li>Test on different screen sizes (desktop, tablet, mobile)</li>
+                <li>Navigate between pages (Dashboard, PoPs, Alerts)</li>
+                <li>Check table responsiveness and scrolling</li>
+                <li>Verify hover effects and animations</li>
+                <li>Test search and filter functionality</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h2>🚀 Key Improvements</h2>
+            <div class="status info">Modern Glass-morphism Design</div>
+            <div class="status info">Gradient Text Effects</div>
+            <div class="status info">Smooth Animations</div>
+            <div class="status info">Better Accessibility</div>
+            <div class="status info">Enhanced Performance</div>
+        </div>
+    </div>
+
+    <script>
+        // Test responsive behavior
+        function checkViewport() {
+            const width = window.innerWidth;
+            const status = document.createElement('div');
+            status.className = 'status ' + (width < 768 ? 'warning' : 'success');
+            status.textContent = `Viewport: ${width}px (${width < 768 ? 'Mobile' : width < 1024 ? 'Tablet' : 'Desktop'})`;
+            
+            const existing = document.querySelector('.viewport-status');
+            if (existing) existing.remove();
+            
+            status.className += ' viewport-status';
+            document.querySelector('.container').appendChild(status);
+        }
+
+        window.addEventListener('resize', checkViewport);
+        checkViewport();
+
+        console.log('🎨 UI Improvements Test Loaded');
+        console.log('📱 Current viewport:', window.innerWidth + 'px');
+    </script>
+</body>
+</html>

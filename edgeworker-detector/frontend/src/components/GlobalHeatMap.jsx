@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, Typography, Chip, Tooltip } from '@mui/material';
+import { Box, Typography, Chip } from '@mui/material';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import InfoTooltip from './InfoTooltip';
 
 // Fix Leaflet default markers in React
 delete L.Icon.Default.prototype._getIconUrl;
@@ -52,11 +53,23 @@ const GlobalHeatMap = ({ data = [] }) => {
     });
     markersRef.current = [];
 
+    console.log('🗺️ Adding markers for', data.length, 'PoPs');
+
     // Add markers for each PoP
     data.forEach(pop => {
-      const { lat, lon, popCode, city, country, coldStartTime, status } = pop;
-      
-      if (!lat || !lon) return;
+      // Handle both data structures from API
+      const lat = pop.lat || pop.latitude;
+      const lon = pop.lon || pop.longitude;
+      const popCode = pop.popCode || pop.pop_code || pop.code;
+      const city = pop.city;
+      const country = pop.country;
+      const coldStartTime = pop.coldStartTime || pop.currentAverage || 0;
+      const status = pop.status || 'healthy';
+
+      if (!lat || !lon) {
+        console.warn('⚠️ Missing coordinates for PoP:', popCode);
+        return;
+      }
 
       // Determine marker color based on performance
       const getMarkerColor = (time, status) => {
@@ -93,7 +106,7 @@ const GlobalHeatMap = ({ data = [] }) => {
       `;
 
       marker.bindPopup(popupContent);
-      
+
       // Add click handler
       marker.on('click', () => {
         setSelectedPop(pop);
@@ -106,32 +119,75 @@ const GlobalHeatMap = ({ data = [] }) => {
   }, [data]);
 
   return (
-    <Box sx={{ height: 400, position: 'relative' }}>
-      <div 
-        ref={mapRef} 
-        style={{ 
-          height: '100%', 
-          width: '100%',
-          borderRadius: 8,
-          overflow: 'hidden'
-        }} 
-      />
-      
-      {/* Legend */}
+    <Box sx={{ position: 'relative' }}>
+      {/* Header with tooltip */}
       <Box 
         sx={{ 
-          position: 'absolute', 
-          top: 16, 
-          right: 16, 
-          bgcolor: 'rgba(0, 0, 0, 0.8)', 
-          p: 2, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          mb: 2,
+          px: 1
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="h6" component="h2">
+            Global Performance Heat Map
+          </Typography>
+          <InfoTooltip 
+            content="components.heatmap"
+            placement="right"
+            size="small"
+          />
+        </Box>
+        <InfoTooltip 
+          content="components.heatmapInteractions"
+          placement="left"
+          size="small"
+        />
+      </Box>
+
+      <Box sx={{ height: 400, position: 'relative' }}>
+        <div
+          ref={mapRef}
+          style={{
+            height: '100%',
+            width: '100%',
+            borderRadius: 8,
+            overflow: 'hidden'
+          }}
+        />
+
+      {/* Legend */}
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 16,
+          right: 16,
+          bgcolor: 'rgba(0, 0, 0, 0.8)',
+          p: 2,
           borderRadius: 1,
           backdropFilter: 'blur(10px)'
         }}
       >
-        <Typography variant="subtitle2" gutterBottom sx={{ color: 'white', fontWeight: 'bold' }}>
-          Performance Legend
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <Typography variant="subtitle2" sx={{ color: 'white', fontWeight: 'bold' }}>
+            Performance Legend
+          </Typography>
+          <InfoTooltip 
+            content="components.heatmapLegend"
+            placement="left"
+            size="small"
+            sx={{ 
+              '& .MuiIconButton-root': { 
+                color: 'rgba(255, 255, 255, 0.7)',
+                '&:hover': {
+                  color: 'rgba(255, 255, 255, 1)'
+                }
+              }
+            }}
+          />
+        </Box>
         {[
           { color: '#4caf50', label: '< 5ms (Excellent)' },
           { color: '#ffeb3b', label: '5-10ms (Good)' },
@@ -139,15 +195,15 @@ const GlobalHeatMap = ({ data = [] }) => {
           { color: '#f44336', label: '> 15ms (Critical)' }
         ].map((item, index) => (
           <Box key={index} display="flex" alignItems="center" mt={0.5}>
-            <Box 
-              sx={{ 
-                width: 12, 
-                height: 12, 
-                borderRadius: '50%', 
-                bgcolor: item.color, 
+            <Box
+              sx={{
+                width: 12,
+                height: 12,
+                borderRadius: '50%',
+                bgcolor: item.color,
                 mr: 1,
                 border: '1px solid rgba(255,255,255,0.3)'
-              }} 
+              }}
             />
             <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.9)' }}>
               {item.label}
@@ -158,33 +214,53 @@ const GlobalHeatMap = ({ data = [] }) => {
 
       {/* Selected PoP Info */}
       {selectedPop && (
-        <Box 
-          sx={{ 
-            position: 'absolute', 
-            bottom: 16, 
-            left: 16, 
-            bgcolor: 'background.paper', 
-            p: 2, 
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 16,
+            left: 16,
+            bgcolor: 'background.paper',
+            p: 2,
             borderRadius: 1,
             minWidth: 200,
             border: '1px solid',
             borderColor: 'divider'
           }}
         >
-          <Typography variant="subtitle2" gutterBottom>
-            {selectedPop.city}, {selectedPop.country}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <Typography variant="subtitle2">
+              {selectedPop.city}, {selectedPop.country}
+            </Typography>
+            <InfoTooltip 
+              content={{
+                title: "Point of Presence Details",
+                content: "Detailed performance metrics for the selected EdgeWorker location. Cold start time indicates how quickly functions initialize at this PoP.",
+                calculation: "Cold start time averaged from recent function executions",
+                threshold: "Target: <5ms, Warning: >10ms, Critical: >15ms",
+                actions: [
+                  {
+                    label: "View PoP Details",
+                    url: "/pops",
+                    type: "internal"
+                  }
+                ]
+              }}
+              placement="top"
+              size="small"
+            />
+          </Box>
           <Typography variant="body2" color="text.secondary">
             Cold Start: {selectedPop.coldStartTime.toFixed(2)}ms
           </Typography>
-          <Chip 
-            label={selectedPop.status.toUpperCase()} 
-            size="small" 
+          <Chip
+            label={selectedPop.status.toUpperCase()}
+            size="small"
             color={selectedPop.status === 'healthy' ? 'success' : selectedPop.status === 'warning' ? 'warning' : 'error'}
             sx={{ mt: 1 }}
           />
         </Box>
       )}
+      </Box>
     </Box>
   );
 };

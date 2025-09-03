@@ -194,6 +194,57 @@ function generateFallbackAggregate(options = {}) {
 }
 
 /**
+ * Generate fallback trends data
+ * @param {Object} options - Generation options
+ * @returns {Array} - Trends data array
+ */
+function generateFallbackTrends(options = {}) {
+    const range = options.range || '7d';
+    
+    // Parse range to determine data points and intervals
+    const rangeMap = {
+        '1d': { points: 24, interval: 60 },    // 24 points, 1 hour intervals
+        '7d': { points: 28, interval: 360 },   // 28 points, 6 hour intervals
+        '30d': { points: 30, interval: 1440 }, // 30 points, 1 day intervals
+        '90d': { points: 90, interval: 1440 }  // 90 points, 1 day intervals
+    };
+    
+    const config = rangeMap[range] || rangeMap['7d'];
+    const now = new Date();
+    const trendsData = [];
+    
+    // Generate baseline performance with some trend
+    let baseResponseTime = 9.0;
+    const trendDirection = Math.random() > 0.5 ? 1 : -1; // Improving or degrading trend
+    const trendStrength = Math.random() * 0.02; // Max 2% change per data point
+    
+    for (let i = config.points - 1; i >= 0; i--) {
+        const timestamp = new Date(now.getTime() - (i * config.interval * 60 * 1000));
+        
+        // Apply trend over time
+        const trendFactor = 1 + (trendDirection * trendStrength * (config.points - i - 1));
+        const avgResponseTime = Math.max(5.0, Math.min(20.0, baseResponseTime * trendFactor));
+        
+        // Generate related metrics
+        const p95ResponseTime = avgResponseTime * (1.3 + Math.random() * 0.4); // 30-70% higher than average
+        const errorRate = Math.max(0, Math.min(5.0, (avgResponseTime - 8) * 0.1 + Math.random() * 0.3)); // Higher response time = more errors
+        const throughput = Math.floor(Math.random() * 500) + 500 + (avgResponseTime < 10 ? 200 : 0); // Better performance = higher throughput
+        
+        trendsData.push({
+            timestamp: timestamp.toISOString(),
+            avgResponseTime: parseFloat(avgResponseTime.toFixed(2)),
+            p95ResponseTime: parseFloat(p95ResponseTime.toFixed(2)),
+            errorRate: parseFloat(errorRate.toFixed(3)),
+            throughput: throughput,
+            _fallback: true
+        });
+    }
+    
+    console.log(`Generated fallback trends data: ${trendsData.length} points for range ${range}`);
+    return trendsData;
+}
+
+/**
  * Get fallback data based on endpoint and parameters
  * @param {string} endpoint - API endpoint name
  * @param {Object} params - Request parameters
@@ -216,6 +267,9 @@ function getFallbackData(endpoint, params = {}) {
             
         case 'aggregate':
             return generateFallbackAggregate(params);
+            
+        case 'trends':
+            return generateFallbackTrends(params);
             
         default:
             console.warn(`Unknown endpoint for fallback data: ${endpoint}`);
@@ -276,6 +330,7 @@ export {
     generateFallbackHeatmap,
     generateFallbackTimeseries,
     generateFallbackAggregate,
+    generateFallbackTrends,
     getFallbackData,
     createFallbackResponse,
     isFallbackData,

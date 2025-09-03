@@ -39,7 +39,7 @@ import toast from 'react-hot-toast';
 
 const AlertsPage = () => {
   const { alerts } = useWebSocket();
-  const { data: alertsData, refetch } = useApi('/alerts?limit=100');
+  const { data: alertsData, refetch } = useApi('/alerts?limit=100&status=all', { refreshInterval: 15000 });
   const { patch, loading: actionLoading } = useApiPost();
   
   const [selectedAlert, setSelectedAlert] = useState(null);
@@ -47,7 +47,7 @@ const AlertsPage = () => {
   const [actionForm, setActionForm] = useState({ notes: '', resolvedBy: '' });
   const [filterStatus, setFilterStatus] = useState('all');
 
-  const allAlerts = alertsData?.alerts || alerts || [];
+  const allAlerts = alertsData?.alerts || [];
   
   const filteredAlerts = allAlerts.filter(alert => 
     filterStatus === 'all' || alert.status === filterStatus
@@ -119,13 +119,28 @@ const AlertsPage = () => {
   };
 
   return (
-    <Box>
+    <Box sx={{ maxWidth: '100%', overflow: 'hidden' }}>
       {/* Header */}
-      <Box mb={4}>
-        <Typography variant="h3" gutterBottom>
+      <Box mb={{ xs: 3, md: 4 }}>
+        <Typography 
+          variant="h3" 
+          gutterBottom
+          sx={{ 
+            fontSize: { xs: '1.75rem', sm: '2rem', md: '2.25rem' },
+            fontWeight: 700,
+            background: 'linear-gradient(135deg, #00d4ff 0%, #ff6b35 100%)',
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent'
+          }}
+        >
           Alert Management
         </Typography>
-        <Typography variant="body1" color="text.secondary">
+        <Typography 
+          variant="body1" 
+          color="text.secondary"
+          sx={{ fontSize: { xs: '0.9rem', md: '1rem' } }}
+        >
           Monitor and manage performance alerts across all EdgeWorker PoPs
         </Typography>
       </Box>
@@ -139,76 +154,157 @@ const AlertsPage = () => {
       </Box>
 
       {/* Filters */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Box display="flex" gap={2} alignItems="center">
-            <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>Status</InputLabel>
-              <Select
-                value={filterStatus}
-                label="Status"
-                onChange={(e) => setFilterStatus(e.target.value)}
+      <Card sx={{ mb: { xs: 2, md: 3 } }}>
+        <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+          <Box 
+            display="flex" 
+            gap={{ xs: 1, md: 2 }} 
+            alignItems="center"
+            flexDirection={{ xs: 'column', sm: 'row' }}
+            justifyContent="space-between"
+          >
+            <Box display="flex" gap={{ xs: 1, md: 2 }} alignItems="center" flexWrap="wrap">
+              <FormControl size="small" sx={{ minWidth: { xs: 100, md: 140 } }}>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={filterStatus}
+                  label="Status"
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  sx={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.08)'
+                    }
+                  }}
+                >
+                  <MenuItem value="all">All Status</MenuItem>
+                  <MenuItem value="active">Active</MenuItem>
+                  <MenuItem value="acknowledged">Acknowledged</MenuItem>
+                  <MenuItem value="resolved">Resolved</MenuItem>
+                </Select>
+              </FormControl>
+              
+              <Button 
+                variant="outlined" 
+                onClick={refetch}
+                sx={{
+                  borderRadius: 2,
+                  px: { xs: 2, md: 3 },
+                  '&:hover': {
+                    transform: 'translateY(-1px)',
+                    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)'
+                  }
+                }}
               >
-            <MenuItem value="all">All</MenuItem>
-            <MenuItem value="active">Active</MenuItem>
-            <MenuItem value="acknowledged">Acknowledged</MenuItem>
-            <MenuItem value="resolved">Resolved</MenuItem>
-          </Select>
-        </FormControl>
-        
-        <Button variant="outlined" onClick={refetch}>
-          Refresh
-        </Button>
-      </Box>
-    </CardContent>
-  </Card>
+                Refresh
+              </Button>
+            </Box>
+
+            <Typography 
+              variant="body2" 
+              color="text.secondary"
+              sx={{ 
+                fontSize: { xs: '0.8rem', md: '0.875rem' },
+                textAlign: { xs: 'center', sm: 'right' }
+              }}
+            >
+              Auto-refresh every 15 seconds
+            </Typography>
+          </Box>
+        </CardContent>
+      </Card>
 
   {/* Alerts Table */}
-  <Card>
-    <TableContainer>
-      <Table>
+  <Card sx={{ overflow: 'hidden' }}>
+    <TableContainer sx={{ maxHeight: { xs: '70vh', md: '80vh' } }}>
+      <Table stickyHeader>
         <TableHead>
           <TableRow>
-            <TableCell>Severity</TableCell>
-            <TableCell>Message</TableCell>
-            <TableCell>Location</TableCell>
-            <TableCell>Status</TableCell>
-            <TableCell>Created</TableCell>
-            <TableCell>Actions</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 140 }}>Severity</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 250 }}>Message</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 150, display: { xs: 'none', md: 'table-cell' } }}>Location</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 100 }}>Status</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 120, display: { xs: 'none', sm: 'table-cell' } }}>Created</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 120 }}>Actions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {filteredAlerts.map((alert, index) => (
-            <TableRow key={alert._id || alert.id || index} hover>
+            <TableRow 
+              key={alert._id || alert.id || index} 
+              hover
+              sx={{
+                '&:hover': {
+                  backgroundColor: 'rgba(0, 212, 255, 0.05)',
+                  transform: 'scale(1.01)',
+                  transition: 'all 0.2s ease'
+                },
+                cursor: 'pointer'
+              }}
+            >
               <TableCell>
-                <Box display="flex" alignItems="center">
+                <Box display="flex" alignItems="center" gap={1}>
                   {getSeverityIcon(alert.severity)}
                   <Chip 
                     label={alert.severity?.toUpperCase() || 'HIGH'} 
                     color={getSeverityColor(alert.severity)}
                     size="small"
-                    sx={{ ml: 1 }}
+                    sx={{ 
+                      fontSize: { xs: '0.7rem', md: '0.75rem' },
+                      height: { xs: 24, md: 28 },
+                      fontWeight: 600
+                    }}
                   />
                 </Box>
               </TableCell>
               
               <TableCell>
-                <Typography variant="body2">
-                  {alert.message || `Regression at ${alert.pop?.city}`}
-                </Typography>
-                {alert.analysis?.summary && (
-                  <Typography variant="caption" color="text.secondary">
-                    {alert.analysis.summary}
+                <Box>
+                  <Typography 
+                    variant="body2"
+                    sx={{ 
+                      fontWeight: 500,
+                      fontSize: { xs: '0.8rem', md: '0.875rem' },
+                      lineHeight: 1.4
+                    }}
+                  >
+                    {alert.message || `Regression at ${alert.pop?.city}`}
                   </Typography>
-                )}
+                  {alert.analysis?.summary && (
+                    <Typography 
+                      variant="caption" 
+                      color="text.secondary"
+                      sx={{ 
+                        display: 'block',
+                        mt: 0.5,
+                        fontSize: { xs: '0.7rem', md: '0.75rem' }
+                      }}
+                    >
+                      {alert.analysis.summary}
+                    </Typography>
+                  )}
+                  {/* Show location on mobile when location column is hidden */}
+                  <Box sx={{ display: { xs: 'block', md: 'none' }, mt: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      {alert.city || alert.pop?.city}, {alert.country || alert.pop?.country} ({alert.pop_code || alert.pop?.code})
+                    </Typography>
+                  </Box>
+                </Box>
               </TableCell>
               
-              <TableCell>
+              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
                 <Box>
-                  <Typography variant="body2">
+                  <Typography 
+                    variant="body2"
+                    sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}
+                  >
                     {alert.city || alert.pop?.city}, {alert.country || alert.pop?.country}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography 
+                    variant="caption" 
+                    color="text.secondary"
+                    sx={{ fontSize: { xs: '0.7rem', md: '0.75rem' } }}
+                  >
                     {alert.pop_code || alert.pop?.code}
                   </Typography>
                 </Box>
@@ -219,11 +315,19 @@ const AlertsPage = () => {
                   label={alert.status?.toUpperCase() || 'ACTIVE'} 
                   color={getStatusColor(alert.status)}
                   size="small"
+                  sx={{ 
+                    fontSize: { xs: '0.7rem', md: '0.75rem' },
+                    height: { xs: 24, md: 28 },
+                    fontWeight: 600
+                  }}
                 />
               </TableCell>
               
-              <TableCell>
-                <Typography variant="body2">
+              <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
+                <Typography 
+                  variant="body2"
+                  sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}
+                >
                   {alert.created_at || alert.timestamp ? 
                     formatDistanceToNow(new Date(alert.created_at || alert.timestamp), { addSuffix: true }) :
                     'Just now'
@@ -232,10 +336,19 @@ const AlertsPage = () => {
               </TableCell>
               
               <TableCell>
-                <Box display="flex" gap={1}>
+                <Box display="flex" gap={0.5} flexWrap="wrap">
                   <Tooltip title="View Details">
-                    <IconButton size="small" onClick={() => setSelectedAlert(alert)}>
-                      <Visibility />
+                    <IconButton 
+                      size="small" 
+                      onClick={() => setSelectedAlert(alert)}
+                      sx={{
+                        '&:hover': {
+                          backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                          transform: 'scale(1.1)'
+                        }
+                      }}
+                    >
+                      <Visibility sx={{ fontSize: { xs: '1rem', md: '1.2rem' } }} />
                     </IconButton>
                   </Tooltip>
                   
@@ -244,8 +357,14 @@ const AlertsPage = () => {
                       <IconButton 
                         size="small" 
                         onClick={() => openActionDialog(alert, 'acknowledge')}
+                        sx={{
+                          '&:hover': {
+                            backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                            transform: 'scale(1.1)'
+                          }
+                        }}
                       >
-                        <CheckCircle />
+                        <CheckCircle sx={{ fontSize: { xs: '1rem', md: '1.2rem' } }} />
                       </IconButton>
                     </Tooltip>
                   )}
@@ -255,8 +374,14 @@ const AlertsPage = () => {
                       <IconButton 
                         size="small" 
                         onClick={() => openActionDialog(alert, 'resolve')}
+                        sx={{
+                          '&:hover': {
+                            backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                            transform: 'scale(1.1)'
+                          }
+                        }}
                       >
-                        <Edit />
+                        <Edit sx={{ fontSize: { xs: '1rem', md: '1.2rem' } }} />
                       </IconButton>
                     </Tooltip>
                   )}
@@ -267,6 +392,32 @@ const AlertsPage = () => {
         </TableBody>
       </Table>
     </TableContainer>
+
+    {filteredAlerts.length === 0 && (
+      <Box 
+        p={{ xs: 3, md: 4 }} 
+        textAlign="center"
+        sx={{
+          background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(255, 107, 53, 0.1) 100%)',
+          borderRadius: 2,
+          m: 2
+        }}
+      >
+        <Typography 
+          color="text.secondary"
+          sx={{ fontSize: { xs: '0.9rem', md: '1rem' } }}
+        >
+          No alerts found matching your criteria
+        </Typography>
+        <Typography 
+          variant="caption" 
+          color="text.secondary"
+          sx={{ mt: 1, display: 'block' }}
+        >
+          All systems are running smoothly
+        </Typography>
+      </Box>
+    )}
   </Card>
 
   {/* Action Dialog */}

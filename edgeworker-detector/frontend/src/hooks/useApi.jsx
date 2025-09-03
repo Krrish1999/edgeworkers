@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 
 // Configure axios defaults
@@ -14,49 +14,113 @@ axios.interceptors.response.use(
   }
 );
 
+// Simple cache to prevent duplicate requests
+const requestCache = new Map();
+const CACHE_DURATION = 5000; // 5 seconds cache for identical requests
+
 export const useApi = (url, options = {}) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const intervalRef = useRef(null);
+  const mountedRef = useRef(true);
 
-  const { refreshInterval, dependencies = [] } = options;
+  const { 
+    refreshInterval, 
+    dependencies = [], 
+    enabled = true,
+    cacheKey 
+  } = options;
 
-  const fetchData = async () => {
-    if (!url) return;
+  const fetchData = useCallback(async (skipCache = false) => {
+    if (!url || !enabled) return;
+
+    const fullCacheKey = cacheKey || url;
+    const now = Date.now();
+
+    // Check cache first (unless skipping cache)
+    if (!skipCache && requestCache.has(fullCacheKey)) {
+      const cached = requestCache.get(fullCacheKey);
+      if (now - cached.timestamp < CACHE_DURATION) {
+        if (mountedRef.current) {
+          setData(cached.data);
+          setLoading(false);
+          setError(null);
+        }
+        return;
+      }
+    }
 
     try {
-      setLoading(true);
-      setError(null);
+      if (mountedRef.current) {
+        setLoading(true);
+        setError(null);
+      }
       
       const response = await axios.get(url);
-      setData(response.data);
+      
+      if (mountedRef.current) {
+        setData(response.data);
+        
+        // Cache the response
+        requestCache.set(fullCacheKey, {
+          data: response.data,
+          timestamp: now
+        });
+      }
     } catch (err) {
-      setError(err);
-      console.error(`API fetch error for ${url}:`, err);
+      if (mountedRef.current) {
+        setError(err);
+        console.error(`API fetch error for ${url}:`, err);
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [url, enabled, cacheKey]);
 
   useEffect(() => {
+    mountedRef.current = true;
+    
+    // Initial fetch
     fetchData();
 
     // Set up refresh interval if specified
-    let interval;
-    if (refreshInterval) {
-      interval = setInterval(fetchData, refreshInterval);
+    if (refreshInterval && enabled) {
+      intervalRef.current = setInterval(() => {
+        fetchData(true); // Skip cache on interval refresh
+      }, refreshInterval);
     }
 
     return () => {
-      if (interval) clearInterval(interval);
+      mountedRef.current = false;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
-  }, [url, ...dependencies]);
+  }, [url, refreshInterval, enabled, ...dependencies]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+
+  const refetch = useCallback(() => {
+    fetchData(true); // Skip cache on manual refetch
+  }, [fetchData]);
 
   return { 
     data, 
     loading, 
     error, 
-    refetch: fetchData 
+    refetch 
   };
 };
 

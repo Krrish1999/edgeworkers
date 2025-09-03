@@ -35,14 +35,27 @@ const Dashboard = () => {
 
   const [overview, setOverview] = useState(null);
 
-  const { data: overviewData, loading: overviewLoading, error: overviewError } = useApi('/dashboard/overview', { refreshInterval: 10000 });
-  const { data: heatmapData, loading: heatmapLoading } = useApi('/dashboard/heatmap', { refreshInterval: 10000 });
+  const { data: overviewData, loading: overviewLoading, error: overviewError } = useApi('/dashboard/overview', { 
+    refreshInterval: 30000, // Reduced from 10s to 30s
+    cacheKey: 'dashboard-overview'
+  });
+  const { data: heatmapData, loading: heatmapLoading } = useApi('/dashboard/heatmap', { 
+    refreshInterval: 60000, // Reduced from 10s to 60s
+    cacheKey: 'dashboard-heatmap'
+  });
+  const { data: alertsData } = useApi('/alerts?limit=10&status=all', { 
+    refreshInterval: 45000, // Reduced from 15s to 45s
+    cacheKey: 'dashboard-alerts'
+  });
   
   const [selectedTimeRange, setSelectedTimeRange] = useState('1h');
 
+  // Combine WebSocket alerts with API alerts, prioritizing WebSocket for real-time updates
+  const allAlerts = alerts.length > 0 ? alerts : (alertsData?.alerts || []);
+  
   // Calculate metrics for display
-  const activeAlerts = alerts.filter(alert => alert.status === 'active').length;
-  const criticalAlerts = alerts.filter(alert => alert.severity === 'critical').length;
+  const activeAlerts = allAlerts.filter(alert => alert.status === 'active').length;
+  const criticalAlerts = allAlerts.filter(alert => alert.severity === 'critical').length;
 
   useEffect(() => {
     if (overviewData) {
@@ -105,6 +118,7 @@ const Dashboard = () => {
             color="primary"
             change="+2 this week"
             trend="up"
+            tooltip="metrics.totalPops"
           />
         </Grid>
         
@@ -116,6 +130,7 @@ const Dashboard = () => {
             color="success"
             change="-0.3ms from yesterday"
             trend="down"
+            tooltip="metrics.avgColdStart"
           />
         </Grid>
         
@@ -127,6 +142,7 @@ const Dashboard = () => {
             color="warning"
             change={`${criticalAlerts} critical`}
             trend={criticalAlerts > 0 ? "up" : "neutral"}
+            tooltip="metrics.activeAlerts"
           />
         </Grid>
         
@@ -138,6 +154,7 @@ const Dashboard = () => {
             color="success"
             change="98.5% uptime"
             trend="up"
+            tooltip="metrics.healthyPops"
           />
         </Grid>
       </Grid>
@@ -148,9 +165,6 @@ const Dashboard = () => {
         <Grid item xs={12} lg={8}>
           <Card sx={{ height: 500 }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Global Performance Heat Map
-              </Typography>
               {heatmapLoading ? (
                 <Box display="flex" justifyContent="center" alignItems="center" height={400}>
                   <CircularProgress />
@@ -164,33 +178,12 @@ const Dashboard = () => {
 
         {/* Alerts Widget */}
         <Grid item xs={12} lg={4}>
-          <AlertsWidget alerts={alerts.slice(0, 10)} />
+          <AlertsWidget alerts={allAlerts.slice(0, 10)} />
         </Grid>
 
         {/* Real-time Performance Chart */}
         <Grid item xs={12}>
-          <Card>
-            <CardContent>
-              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="h6">
-                  Real-time Performance Metrics
-                </Typography>
-                <Box>
-                  {['1h', '6h', '24h'].map((range) => (
-                    <Chip
-                      key={range}
-                      label={range}
-                      onClick={() => setSelectedTimeRange(range)}
-                      color={selectedTimeRange === range ? 'primary' : 'default'}
-                      variant={selectedTimeRange === range ? 'filled' : 'outlined'}
-                      sx={{ ml: 1 }}
-                    />
-                  ))}
-                </Box>
-              </Box>
-              <RealtimeChart timeRange={selectedTimeRange} />
-            </CardContent>
-          </Card>
+          <RealtimeChart timeRange={selectedTimeRange} />
         </Grid>
 
         {/* Performance Trends */}

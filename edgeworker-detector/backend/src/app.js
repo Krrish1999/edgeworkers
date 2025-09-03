@@ -3,6 +3,16 @@ import morgan from 'morgan';
 import cors from 'cors';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
+import { validateEnvironment } from './config/environment.js';
+
+// Validate environment configuration on startup
+try {
+  const config = validateEnvironment();
+  console.log('🔧 Configuration loaded successfully');
+} catch (error) {
+  console.error('❌ Configuration error:', error.message);
+  process.exit(1);
+}
 
 // Route and Util Imports
 import dashboardRoutes from './routes/dashboard.js';
@@ -20,8 +30,27 @@ const port = process.env.PORT || 3001;
 
 // --- Middleware ---
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
+
+// Basic security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+// Request logging with timing
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - ${res.statusCode} - ${duration}ms - ${req.ip}`);
+  });
+  next();
+});
 
 // --- API Routes ---
 app.use('/api/dashboard', dashboardRoutes);
@@ -566,6 +595,37 @@ const gracefulShutdown = async (signal) => {
   
   process.exit(0);
 };
+
+// Global error handler
+app.use((error, req, res, next) => {
+  const timestamp = new Date().toISOString();
+  const errorId = Math.random().toString(36).substr(2, 9);
+  
+  console.error(`${timestamp} - Error ${errorId}:`, {
+    message: error.message,
+    stack: error.stack,
+    url: req.url,
+    method: req.method,
+    ip: req.ip,
+    userAgent: req.get('User-Agent')
+  });
+  
+  res.status(error.status || 500).json({
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong',
+    errorId: errorId,
+    timestamp: timestamp
+  });
+});
+
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({
+    error: 'Not Found',
+    message: `Route ${req.method} ${req.originalUrl} not found`,
+    timestamp: new Date().toISOString()
+  });
+});
 
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
